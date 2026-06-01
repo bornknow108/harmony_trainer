@@ -366,6 +366,7 @@
       text-transform: uppercase;
     }
     .playback-stat strong { color: var(--green); font-size: 14px; letter-spacing: 0; }
+    .playback-stat strong.audio-blocked { color: var(--coral); }
     .play { min-width: 138px; padding: 13px 20px; color: white; background: var(--coral); }
     .play.playing { color: #f4f1ea; background: #2c3030; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .18); }
     .transport-actions { display: flex; flex-wrap: wrap; justify-content: end; gap: 8px; }
@@ -527,6 +528,7 @@
             <span data-i18n="transportDescription">1コード = 1小節。指定回数の再生後に進行が変わります。</span>
             <div class="playback-stats">
               <span class="playback-stat"><span data-i18n="loops">ループ数</span> <strong id="loopStatus">1 / 4 回目 · 残り 4 回</strong></span>
+              <span class="playback-stat"><span data-i18n="audio">音声</span> <strong id="audioStatus">待機中</strong></span>
             </div>
           </div>
           <div class="transport-actions">
@@ -537,11 +539,11 @@
         </div>
       </section>
     </div>
-    <footer><span>Harmony Trainer · <span id="appVersion">v0.1.1</span> · Web Audio API synthesizer · </span><span data-i18n="volumeWarning">音量に注意して再生してください</span></footer>
+    <footer><span>Harmony Trainer · <span id="appVersion">v0.1.3</span> · Web Audio API synthesizer · </span><span data-i18n="volumeWarning">音量に注意して再生してください</span></footer>
   </main>
 
   <script>
-    const APP_VERSION = "v0.1.1";
+    const APP_VERSION = "v0.1.3";
     const NOTES = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
     const MAJOR_INTERVALS = [0, 2, 4, 5, 7, 9, 11];
     const MINOR_INTERVALS = [0, 2, 3, 5, 7, 8, 10];
@@ -573,7 +575,8 @@
         transportDescription: "1コード = 1小節。指定回数の再生後に進行が変わります。",
         skip: "次の進行へ", lock: "進行を固定", locked: "固定中", play: "▶ 再生する", stop: "■ 停止する",
         volumeWarning: "音量に注意して再生してください", remaining: "残り", times: "回", loop: "ループ",
-        hidden: "非表示", bar: "小節", currentBeat: "現在の拍"
+        hidden: "非表示", bar: "小節", currentBeat: "現在の拍", audio: "音声",
+        audioIdle: "待機中", audioStarting: "起動中", audioReady: "再生可能", audioBlocked: "再生ボタンを再度タップ", audioUnsupported: "非対応"
       },
       en: {
         eyebrow: "Chord progression ear training",
@@ -588,7 +591,8 @@
         transportDescription: "1 chord = 1 bar. The progression changes after the selected number of loops.",
         skip: "Next progression", lock: "Lock progression", locked: "Locked", play: "▶ Play", stop: "■ Stop",
         volumeWarning: "Start playback at a comfortable volume", remaining: "remaining", times: "loops", loop: "Loop",
-        hidden: "Hidden", bar: "BAR", currentBeat: "Current beat"
+        hidden: "Hidden", bar: "BAR", currentBeat: "Current beat", audio: "Audio",
+        audioIdle: "Idle", audioStarting: "Starting", audioReady: "Ready", audioBlocked: "Tap play again", audioUnsupported: "Unsupported"
       }
     };
     const TIMBRES = {
@@ -637,6 +641,7 @@
     const bpmOutput = document.querySelector("#bpmOutput");
     const loopOptions = document.querySelector("#loopOptions");
     const loopStatus = document.querySelector("#loopStatus");
+    const audioStatus = document.querySelector("#audioStatus");
     const stageBpm = document.querySelector("#stageBpm");
     const timbreOptions = document.querySelector("#timbreOptions");
     const metronomeOptions = document.querySelector("#metronomeOptions");
@@ -661,6 +666,7 @@
     let playbackBpm = 100;
     let playing = false;
     let playbackStarting = false;
+    let audioStatusKey = "audioIdle";
     let progressionLocked = false;
     let language = "ja";
     let currentRoot = "C";
@@ -715,6 +721,7 @@
         updateLoopStatus();
       }
       bpmOutput.textContent = bpmMode.value === "random" ? translate("randomBpm").replace(/^.*?[(（]/, "").replace(/[)）]$/, "") : bpm.value;
+      setAudioStatus(audioStatusKey);
       lockProgressionButton.textContent = progressionLocked ? translate("locked") : translate("lock");
       playButton.textContent = playing ? translate("stop") : translate("play");
     }
@@ -916,8 +923,8 @@
         left[index] = samples[index] * (1 - stereo);
         right[index] = samples[index] * (1 + stereo);
       }
-      buffer.copyToChannel(left, 0);
-      buffer.copyToChannel(right, 1);
+      buffer.getChannelData(0).set(left);
+      buffer.getChannelData(1).set(right);
       return buffer;
     }
 
@@ -1148,15 +1155,67 @@
       }, (60 / playbackBpm) * 1000);
     }
 
-    function unlockAudio() {
+    function setAudioStatus(key) {
+      audioStatusKey = key;
+      audioStatus.textContent = translate(key);
+      audioStatus.classList.toggle("audio-blocked", key === "audioBlocked" || key === "audioUnsupported");
+    }
+
+    function primeAudioOutput() {
+      const now = audioContext.currentTime;
+      const oscillator = audioContext.createOscillator();
+      const gain = audioContext.createGain();
+      oscillator.frequency.value = 440;
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(0.00001, now + 0.025);
+      oscillator.connect(gain);
+      gain.connect(masterGain);
+      oscillator.start(now);
+      oscillator.stop(now + 0.03);
+    }
+
+    function initializeAudio() {
       if (!audioContext) {
         const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-        if (!AudioContextClass) throw new Error("Web Audio API is not supported");
+        if (!AudioContextClass) {
+          setAudioStatus("audioUnsupported");
+          throw new Error("Web Audio API is not supported");
+        }
         audioContext = new AudioContextClass();
         masterGain = audioContext.createGain();
         masterGain.gain.value = 0.54;
         masterGain.connect(audioContext.destination);
+        audioContext.onstatechange = () => {
+          if (audioContext.state === "running") setAudioStatus("audioReady");
+          if (audioContext.state === "suspended" || audioContext.state === "interrupted") {
+            setAudioStatus("audioBlocked");
+          }
+        };
       }
+    }
+
+    function waitForAudioRunning(timeout = 1000) {
+      const startedAt = performance.now();
+      return new Promise((resolve) => {
+        const checkState = () => {
+          if (audioContext.state === "running") {
+            resolve(true);
+            return;
+          }
+          if (performance.now() - startedAt >= timeout) {
+            resolve(false);
+            return;
+          }
+          window.setTimeout(checkState, 25);
+        };
+        checkState();
+      });
+    }
+
+    function unlockAudio() {
+      initializeAudio();
+      setAudioStatus("audioStarting");
+      primeAudioOutput();
 
       // Mobile Safari needs a source to start during the user's tap before audio is unlocked.
       const silentSource = audioContext.createBufferSource();
@@ -1165,9 +1224,22 @@
       silentSource.start(audioContext.currentTime);
 
       if (audioContext.state !== "running") {
-        return Promise.resolve(audioContext.resume());
+        try {
+          audioContext.resume()?.catch?.(() => {
+            setAudioStatus("audioBlocked");
+          });
+        } catch (error) {
+          setAudioStatus("audioBlocked");
+          return Promise.reject(error);
+        }
+        return waitForAudioRunning().then((unlocked) => {
+          primeAudioOutput();
+          setAudioStatus(unlocked ? "audioReady" : "audioBlocked");
+          return unlocked;
+        });
       }
-      return Promise.resolve();
+      setAudioStatus("audioReady");
+      return Promise.resolve(true);
     }
 
     function scheduleBar() {
@@ -1198,10 +1270,7 @@
       if (playing || playbackStarting) return;
       playbackStarting = true;
       try {
-        await unlockAudio();
-        if (audioContext.state !== "running") {
-          throw new Error(`AudioContext failed to start: ${audioContext.state}`);
-        }
+        if (!await unlockAudio()) return;
         playing = true;
         currentBar = 0;
         completedLoops = 0;
@@ -1211,6 +1280,7 @@
         playButton.classList.add("playing");
         scheduleBar();
       } catch (error) {
+        if (audioStatusKey !== "audioUnsupported") setAudioStatus("audioBlocked");
         console.error(error);
       } finally {
         playbackStarting = false;
@@ -1303,18 +1373,16 @@
     });
     skipProgressionButton.addEventListener("click", skipProgression);
     const generateButton = document.querySelector("#generate");
-    [generateButton, playButton].forEach((button) => {
-      button.addEventListener("touchstart", () => {
-        unlockAudio().catch(() => {
-          // The click handler retries after the browser has completed the tap.
-        });
-      }, { passive: true });
-    });
     generateButton.addEventListener("click", () => {
       buildProgression();
       startPlayback();
     });
     playButton.addEventListener("click", () => playing ? stopPlayback() : startPlayback());
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden && audioContext && audioContext.state !== "running") {
+        setAudioStatus("audioBlocked");
+      }
+    });
 
     languageSelect.value = navigator.language.startsWith("ja") ? "ja" : "en";
     appVersion.textContent = APP_VERSION;
