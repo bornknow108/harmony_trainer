@@ -1145,7 +1145,7 @@
       }, (60 / playbackBpm) * 1000);
     }
 
-    async function unlockAudio() {
+    function unlockAudio() {
       if (!audioContext) {
         const AudioContextClass = window.AudioContext || window.webkitAudioContext;
         if (!AudioContextClass) throw new Error("Web Audio API is not supported");
@@ -1159,9 +1159,13 @@
       const silentSource = audioContext.createBufferSource();
       silentSource.buffer = audioContext.createBuffer(1, 1, audioContext.sampleRate);
       silentSource.connect(audioContext.destination);
-      silentSource.start(0);
+      silentSource.start(audioContext.currentTime);
 
-      if (audioContext.state !== "running") await audioContext.resume();
+      if (audioContext.state !== "running") {
+        audioContext.resume()?.catch?.(() => {
+          // A later user tap retries the unlock when the browser blocks this attempt.
+        });
+      }
     }
 
     function scheduleBar() {
@@ -1188,8 +1192,8 @@
       nextBarTimer = window.setTimeout(scheduleBar, secondsPerBar * 1000);
     }
 
-    async function startPlayback() {
-      await unlockAudio();
+    function startPlayback() {
+      unlockAudio();
       playing = true;
       currentBar = 0;
       completedLoops = 0;
@@ -1285,9 +1289,13 @@
       lockProgressionButton.textContent = progressionLocked ? translate("locked") : translate("lock");
     });
     skipProgressionButton.addEventListener("click", skipProgression);
-    document.querySelector("#generate").addEventListener("click", async () => {
+    const generateButton = document.querySelector("#generate");
+    [generateButton, playButton].forEach((button) => {
+      button.addEventListener("touchend", unlockAudio, { passive: true });
+    });
+    generateButton.addEventListener("click", () => {
       buildProgression();
-      await startPlayback();
+      startPlayback();
     });
     playButton.addEventListener("click", () => playing ? stopPlayback() : startPlayback());
 
