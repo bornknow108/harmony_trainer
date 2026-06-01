@@ -381,13 +381,13 @@
 
     footer { margin-top: 18px; color: var(--muted); font-size: 11px; text-align: center; }
 
-    @media (max-width: 760px) {
+    @media (max-width: 760px), (hover: none) and (pointer: coarse) {
       main { padding: 84px 0 calc(104px + env(safe-area-inset-bottom)); }
       header { display: block; }
       .intro { margin-top: 16px; }
       .header-side { justify-items: start; margin-top: 16px; }
       .workspace { grid-template-columns: 1fr; }
-      .stage { min-height: auto; }
+      .stage { min-height: auto; backdrop-filter: none; }
       .stage-meta { flex-wrap: wrap; }
       .key-display {
         position: fixed;
@@ -569,11 +569,11 @@
         </div>
       </section>
     </div>
-    <footer><span>Harmony Trainer · <span id="appVersion">v0.1.5</span> · Web Audio API synthesizer · </span><span data-i18n="volumeWarning">音量に注意して再生してください</span></footer>
+    <footer><span>Harmony Trainer · <span id="appVersion">v0.1.6</span> · Web Audio API synthesizer · </span><span data-i18n="volumeWarning">音量に注意して再生してください</span></footer>
   </main>
 
   <script>
-    const APP_VERSION = "v0.1.5";
+    const APP_VERSION = "v0.1.6";
     const NOTES = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
     const MAJOR_INTERVALS = [0, 2, 4, 5, 7, 9, 11];
     const MINOR_INTERVALS = [0, 2, 3, 5, 7, 8, 10];
