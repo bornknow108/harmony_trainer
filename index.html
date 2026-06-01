@@ -382,17 +382,47 @@
     footer { margin-top: 18px; color: var(--muted); font-size: 11px; text-align: center; }
 
     @media (max-width: 760px) {
-      main { padding-top: 28px; }
+      main { padding: 84px 0 calc(104px + env(safe-area-inset-bottom)); }
       header { display: block; }
       .intro { margin-top: 16px; }
       .header-side { justify-items: start; margin-top: 16px; }
       .workspace { grid-template-columns: 1fr; }
       .stage { min-height: auto; }
       .stage-meta { flex-wrap: wrap; }
+      .key-display {
+        position: fixed;
+        top: calc(8px + env(safe-area-inset-top));
+        left: 12px;
+        right: 12px;
+        z-index: 10;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 9px 12px;
+        background: rgba(21, 23, 23, .96);
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(16px);
+      }
+      .key-display strong { margin-top: 1px; font-size: 24px; }
       .stage-bpm { width: 100%; justify-content: center; }
       .chords { grid-template-columns: repeat(2, 1fr); margin: 28px 0; }
       .chord { min-height: 132px; }
       .chord-name { margin-top: 20px; }
+      .transport-actions {
+        position: fixed;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        z-index: 10;
+        display: grid;
+        grid-template-columns: 1fr 1fr 1.24fr;
+        gap: 7px;
+        padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+        border-top: 1px solid var(--line);
+        background: rgba(21, 23, 23, .96);
+        box-shadow: 0 -12px 28px rgba(0, 0, 0, .32);
+        backdrop-filter: blur(16px);
+      }
+      .transport-actions button { min-width: 0; padding: 12px 6px; font-size: 12px; }
     }
   </style>
 </head>
@@ -539,11 +569,11 @@
         </div>
       </section>
     </div>
-    <footer><span>Harmony Trainer · <span id="appVersion">v0.1.4</span> · Web Audio API synthesizer · </span><span data-i18n="volumeWarning">音量に注意して再生してください</span></footer>
+    <footer><span>Harmony Trainer · <span id="appVersion">v0.1.5</span> · Web Audio API synthesizer · </span><span data-i18n="volumeWarning">音量に注意して再生してください</span></footer>
   </main>
 
   <script>
-    const APP_VERSION = "v0.1.4";
+    const APP_VERSION = "v0.1.5";
     const NOTES = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
     const MAJOR_INTERVALS = [0, 2, 4, 5, 7, 9, 11];
     const MINOR_INTERVALS = [0, 2, 3, 5, 7, 8, 10];
