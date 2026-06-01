@@ -404,8 +404,9 @@
       }
       .key-display strong { margin-top: 1px; font-size: 24px; }
       .stage-bpm { width: 100%; justify-content: center; }
-      .chords { grid-template-columns: repeat(2, 1fr); margin: 28px 0; }
-      .chord { min-height: 132px; }
+      .chords { display: block; margin: 28px 0; }
+      .loop-divider, .chord { display: none; }
+      .chord.mobile-visible { display: block; min-height: 154px; }
       .chord-name { margin-top: 20px; }
       .transport-actions {
         position: fixed;
@@ -569,11 +570,11 @@
         </div>
       </section>
     </div>
-    <footer><span>Harmony Trainer · <span id="appVersion">v0.1.6</span> · Web Audio API synthesizer · </span><span data-i18n="volumeWarning">音量に注意して再生してください</span></footer>
+    <footer><span>Harmony Trainer · <span id="appVersion">v0.1.7</span> · Web Audio API synthesizer · </span><span data-i18n="volumeWarning">音量に注意して再生してください</span></footer>
   </main>
 
   <script>
-    const APP_VERSION = "v0.1.6";
+    const APP_VERSION = "v0.1.7";
     const NOTES = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
     const MAJOR_INTERVALS = [0, 2, 4, 5, 7, 9, 11];
     const MINOR_INTERVALS = [0, 2, 3, 5, 7, 8, 10];
@@ -874,6 +875,7 @@
           </article>
         `).join("")}
       `).join("");
+      chordContainer.querySelector(".chord")?.classList.add("mobile-visible");
     }
 
     function getLoopLimit() {
@@ -1144,11 +1146,14 @@
     function highlightBar(index) {
       document.querySelectorAll(".chord").forEach((element, chordIndex) => {
         element.classList.toggle("active", chordIndex === index);
+        element.classList.toggle("mobile-visible", chordIndex === index);
       });
-      document.querySelector(`.chord[data-index="${index}"]`)?.scrollIntoView({
-        behavior: "smooth",
-        block: "nearest"
-      });
+      if (!window.matchMedia("(max-width: 760px), (hover: none) and (pointer: coarse)").matches) {
+        document.querySelector(`.chord[data-index="${index}"]`)?.scrollIntoView({
+          behavior: "smooth",
+          block: "nearest"
+        });
+      }
     }
 
     function highlightBeat(index = -1) {
