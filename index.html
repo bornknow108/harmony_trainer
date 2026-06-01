@@ -537,11 +537,11 @@
         </div>
       </section>
     </div>
-    <footer><span>Harmony Trainer · <span id="appVersion">v0.1.0</span> · Web Audio API synthesizer · </span><span data-i18n="volumeWarning">音量に注意して再生してください</span></footer>
+    <footer><span>Harmony Trainer · <span id="appVersion">v0.1.1</span> · Web Audio API synthesizer · </span><span data-i18n="volumeWarning">音量に注意して再生してください</span></footer>
   </main>
 
   <script>
-    const APP_VERSION = "v0.1.0";
+    const APP_VERSION = "v0.1.1";
     const NOTES = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
     const MAJOR_INTERVALS = [0, 2, 4, 5, 7, 9, 11];
     const MINOR_INTERVALS = [0, 2, 3, 5, 7, 8, 10];
@@ -660,6 +660,7 @@
     let completedLoops = 0;
     let playbackBpm = 100;
     let playing = false;
+    let playbackStarting = false;
     let progressionLocked = false;
     let language = "ja";
     let currentRoot = "C";
@@ -1164,10 +1165,9 @@
       silentSource.start(audioContext.currentTime);
 
       if (audioContext.state !== "running") {
-        audioContext.resume()?.catch?.(() => {
-          // A later user tap retries the unlock when the browser blocks this attempt.
-        });
+        return Promise.resolve(audioContext.resume());
       }
+      return Promise.resolve();
     }
 
     function scheduleBar() {
@@ -1194,16 +1194,27 @@
       nextBarTimer = window.setTimeout(scheduleBar, secondsPerBar * 1000);
     }
 
-    function startPlayback() {
-      unlockAudio();
-      playing = true;
-      currentBar = 0;
-      completedLoops = 0;
-      choosePlaybackBpm();
-      updateLoopStatus();
-      playButton.textContent = translate("stop");
-      playButton.classList.add("playing");
-      scheduleBar();
+    async function startPlayback() {
+      if (playing || playbackStarting) return;
+      playbackStarting = true;
+      try {
+        await unlockAudio();
+        if (audioContext.state !== "running") {
+          throw new Error(`AudioContext failed to start: ${audioContext.state}`);
+        }
+        playing = true;
+        currentBar = 0;
+        completedLoops = 0;
+        choosePlaybackBpm();
+        updateLoopStatus();
+        playButton.textContent = translate("stop");
+        playButton.classList.add("playing");
+        scheduleBar();
+      } catch (error) {
+        console.error(error);
+      } finally {
+        playbackStarting = false;
+      }
     }
 
     function stopPlayback() {
@@ -1293,7 +1304,11 @@
     skipProgressionButton.addEventListener("click", skipProgression);
     const generateButton = document.querySelector("#generate");
     [generateButton, playButton].forEach((button) => {
-      button.addEventListener("touchend", unlockAudio, { passive: true });
+      button.addEventListener("touchstart", () => {
+        unlockAudio().catch(() => {
+          // The click handler retries after the browser has completed the tap.
+        });
+      }, { passive: true });
     });
     generateButton.addEventListener("click", () => {
       buildProgression();
