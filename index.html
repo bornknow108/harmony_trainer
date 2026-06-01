@@ -1145,6 +1145,25 @@
       }, (60 / playbackBpm) * 1000);
     }
 
+    async function unlockAudio() {
+      if (!audioContext) {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass) throw new Error("Web Audio API is not supported");
+        audioContext = new AudioContextClass();
+        masterGain = audioContext.createGain();
+        masterGain.gain.value = 0.54;
+        masterGain.connect(audioContext.destination);
+      }
+
+      // Mobile Safari needs a source to start during the user's tap before audio is unlocked.
+      const silentSource = audioContext.createBufferSource();
+      silentSource.buffer = audioContext.createBuffer(1, 1, audioContext.sampleRate);
+      silentSource.connect(audioContext.destination);
+      silentSource.start(0);
+
+      if (audioContext.state !== "running") await audioContext.resume();
+    }
+
     function scheduleBar() {
       if (!playing) return;
       if (currentBar >= progression.length) {
@@ -1170,14 +1189,7 @@
     }
 
     async function startPlayback() {
-      audioContext ??= new AudioContext();
-      if (audioContext.state === "suspended") await audioContext.resume();
-      masterGain ??= (() => {
-        const gain = audioContext.createGain();
-        gain.gain.value = 0.54;
-        gain.connect(audioContext.destination);
-        return gain;
-      })();
+      await unlockAudio();
       playing = true;
       currentBar = 0;
       completedLoops = 0;
