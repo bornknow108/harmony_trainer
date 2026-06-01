@@ -537,10 +537,11 @@
         </div>
       </section>
     </div>
-    <footer><span>Harmony Trainer · Web Audio API synthesizer · </span><span data-i18n="volumeWarning">音量に注意して再生してください</span></footer>
+    <footer><span>Harmony Trainer · <span id="appVersion">v0.1.0</span> · Web Audio API synthesizer · </span><span data-i18n="volumeWarning">音量に注意して再生してください</span></footer>
   </main>
 
   <script>
+    const APP_VERSION = "v0.1.0";
     const NOTES = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
     const MAJOR_INTERVALS = [0, 2, 4, 5, 7, 9, 11];
     const MINOR_INTERVALS = [0, 2, 3, 5, 7, 8, 10];
@@ -626,6 +627,7 @@
     };
 
     const languageSelect = document.querySelector("#languageSelect");
+    const appVersion = document.querySelector("#appVersion");
     const keySelect = document.querySelector("#keySelect");
     const modeSelect = document.querySelector("#modeSelect");
     const patternSelect = document.querySelector("#patternSelect");
@@ -1300,6 +1302,7 @@
     playButton.addEventListener("click", () => playing ? stopPlayback() : startPlayback());
 
     languageSelect.value = navigator.language.startsWith("ja") ? "ja" : "en";
+    appVersion.textContent = APP_VERSION;
     languageSelect.addEventListener("change", applyLanguage);
     applyLanguage();
     buildProgression();
