@@ -132,6 +132,7 @@
     .inline-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
     .button-options { display: grid; gap: 6px; }
     .button-options.four { grid-template-columns: repeat(4, 1fr); }
+    .button-options.five { grid-template-columns: repeat(5, 1fr); }
     .button-options.three { grid-template-columns: repeat(3, 1fr); }
     .button-options.two { grid-template-columns: repeat(2, 1fr); }
     .choice-option {
@@ -408,6 +409,7 @@
       .loop-divider, .chord { display: none; }
       .chord.mobile-visible { display: block; min-height: 154px; }
       .chord-name { margin-top: 20px; }
+      .scroll-setting { display: none; }
       .transport-actions {
         position: fixed;
         right: 0;
@@ -483,11 +485,12 @@
 
         <div class="control-group">
           <span class="section-label" data-i18n="loops">ループ数</span>
-          <div class="button-options four" id="loopOptions" aria-label="進行を切り替えるまでのループ数" data-i18n-aria="loops">
+          <div class="button-options five" id="loopOptions" aria-label="進行を切り替えるまでのループ数" data-i18n-aria="loops">
             <button class="choice-option active" type="button" data-loops="4">4</button>
             <button class="choice-option" type="button" data-loops="8">8</button>
             <button class="choice-option" type="button" data-loops="12">12</button>
             <button class="choice-option" type="button" data-loops="24">24</button>
+            <button class="choice-option" type="button" data-loops="infinite" aria-label="無限" data-i18n-aria="infinite">∞</button>
           </div>
         </div>
 
@@ -526,6 +529,10 @@
             <label class="switch-row"><span data-i18n="chordInfo">コード情報</span>
               <input id="showChords" type="checkbox" checked>
               <span class="switch-control"><span class="switch-state">ON</span><span class="switch-track" aria-hidden="true"></span></span>
+            </label>
+            <label class="switch-row scroll-setting"><span data-i18n="scroll">スクロール</span>
+              <input id="enableScroll" type="checkbox">
+              <span class="switch-control"><span class="switch-state">OFF</span><span class="switch-track" aria-hidden="true"></span></span>
             </label>
           </div>
         </div>
@@ -570,11 +577,11 @@
         </div>
       </section>
     </div>
-    <footer><span>Harmony Trainer · <span id="appVersion">v0.1.7</span> · Web Audio API synthesizer · </span><span data-i18n="volumeWarning">音量に注意して再生してください</span></footer>
+    <footer><span>Harmony Trainer · <span id="appVersion">v0.1.9</span> · Web Audio API synthesizer · </span><span data-i18n="volumeWarning">音量に注意して再生してください</span></footer>
   </main>
 
   <script>
-    const APP_VERSION = "v0.1.7";
+    const APP_VERSION = "v0.1.9";
     const NOTES = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
     const MAJOR_INTERVALS = [0, 2, 4, 5, 7, 9, 11];
     const MINOR_INTERVALS = [0, 2, 3, 5, 7, 8, 10];
@@ -601,7 +608,7 @@
         progression: "コード進行", loops: "ループ数", sound: "音色", guitar: "ギター", piano: "ピアノ",
         metronome: "メトロノーム", on: "オン", off: "オフ", chordRhythm: "コードを鳴らす間隔",
         oneBeat: "1拍", twoBeats: "2拍", fourBeats: "4拍", display: "表示設定",
-        keyInfo: "キー情報", chordInfo: "コード情報", newProgression: "新しい進行",
+        keyInfo: "キー情報", chordInfo: "コード情報", scroll: "スクロール", infinite: "無限", newProgression: "新しい進行",
         generatePlay: "進行を生成して再生", currentKey: "現在のキー",
         transportDescription: "1コード = 1小節。指定回数の再生後に進行が変わります。",
         skip: "次の進行へ", lock: "進行を固定", locked: "固定中", play: "▶ 再生する", stop: "■ 停止する",
@@ -617,7 +624,7 @@
         progression: "Chord progression", loops: "Loops", sound: "Sound", guitar: "Guitar", piano: "Piano",
         metronome: "Metronome", on: "On", off: "Off", chordRhythm: "Chord interval",
         oneBeat: "1 beat", twoBeats: "2 beats", fourBeats: "4 beats", display: "Display",
-        keyInfo: "Key info", chordInfo: "Chord info", newProgression: "New progression",
+        keyInfo: "Key info", chordInfo: "Chord info", scroll: "Scroll", infinite: "Infinite", newProgression: "New progression",
         generatePlay: "Generate and play", currentKey: "Current key",
         transportDescription: "1 chord = 1 bar. The progression changes after the selected number of loops.",
         skip: "Next progression", lock: "Lock progression", locked: "Locked", play: "▶ Play", stop: "■ Stop",
@@ -679,6 +686,7 @@
     const chordRhythmOptions = document.querySelector("#chordRhythmOptions");
     const showKey = document.querySelector("#showKey");
     const showChords = document.querySelector("#showChords");
+    const enableScroll = document.querySelector("#enableScroll");
     const chordContainer = document.querySelector("#chords");
     const keyDisplay = document.querySelector("#keyDisplay");
     const currentKey = document.querySelector("#currentKey");
@@ -794,7 +802,7 @@
     }
 
     function answersShouldReveal() {
-      return playing && completedLoops === getLoopLimit() - 1;
+      return playing && !isInfiniteLoop() && completedLoops === getLoopLimit() - 1;
     }
 
     function updateDisplaySettings({ reveal = answersShouldReveal() } = {}) {
@@ -810,6 +818,7 @@
       });
       showKey.nextElementSibling.querySelector(".switch-state").textContent = showKey.checked ? "ON" : "OFF";
       showChords.nextElementSibling.querySelector(".switch-state").textContent = showChords.checked ? "ON" : "OFF";
+      enableScroll.nextElementSibling.querySelector(".switch-state").textContent = enableScroll.checked ? "ON" : "OFF";
     }
 
     function getSelectedValue(container) {
@@ -865,7 +874,7 @@
 
     function renderChordPanels() {
       const loops = getLoopLimit();
-      chordContainer.innerHTML = Array.from({ length: loops }, (_, loopIndex) => `
+      chordContainer.innerHTML = Array.from({ length: isInfiniteLoop() ? 1 : loops }, (_, loopIndex) => `
         <div class="loop-divider">${translate("loop")} ${loopIndex + 1}</div>
         ${progression.map((chord, chordIndex) => `
           <article class="chord" data-index="${loopIndex * progression.length + chordIndex}">
@@ -879,11 +888,20 @@
     }
 
     function getLoopLimit() {
-      return Number(loopOptions.querySelector(".choice-option.active")?.dataset.loops || 4);
+      const loops = loopOptions.querySelector(".choice-option.active")?.dataset.loops || "4";
+      return loops === "infinite" ? Infinity : Number(loops);
+    }
+
+    function isInfiniteLoop() {
+      return getLoopLimit() === Infinity;
     }
 
     function updateLoopStatus() {
       const limit = getLoopLimit();
+      if (isInfiniteLoop()) {
+        loopStatus.textContent = "∞";
+        return;
+      }
       const current = Math.min(completedLoops + 1, limit);
       const remaining = Math.max(0, limit - completedLoops);
       loopStatus.textContent = language === "en"
@@ -1144,12 +1162,13 @@
     }
 
     function highlightBar(index) {
+      const visibleIndex = isInfiniteLoop() ? index % progression.length : index;
       document.querySelectorAll(".chord").forEach((element, chordIndex) => {
-        element.classList.toggle("active", chordIndex === index);
-        element.classList.toggle("mobile-visible", chordIndex === index);
+        element.classList.toggle("active", chordIndex === visibleIndex);
+        element.classList.toggle("mobile-visible", chordIndex === visibleIndex);
       });
-      if (!window.matchMedia("(max-width: 760px), (hover: none) and (pointer: coarse)").matches) {
-        document.querySelector(`.chord[data-index="${index}"]`)?.scrollIntoView({
+      if (enableScroll.checked && !window.matchMedia("(max-width: 760px), (hover: none) and (pointer: coarse)").matches) {
+        document.querySelector(`.chord[data-index="${visibleIndex}"]`)?.scrollIntoView({
           behavior: "smooth",
           block: "nearest"
         });
@@ -1335,7 +1354,7 @@
       playChordRhythm(progression[currentBar], now);
       highlightBar(completedLoops * progression.length + currentBar);
       updateDisplaySettings({
-        reveal: completedLoops === getLoopLimit() - 1
+        reveal: !isInfiniteLoop() && completedLoops === getLoopLimit() - 1
       });
       startBeatDisplay();
       currentBar += 1;
@@ -1433,6 +1452,7 @@
       loopOptions.querySelectorAll(".choice-option").forEach((element) => {
         element.classList.toggle("active", element === option);
       });
+      completedLoops = 0;
       renderChordPanels();
       updateDisplaySettings();
       updateLoopStatus();
@@ -1442,6 +1462,7 @@
     enableChoiceButtons(chordRhythmOptions);
     showKey.addEventListener("change", updateDisplaySettings);
     showChords.addEventListener("change", updateDisplaySettings);
+    enableScroll.addEventListener("change", updateDisplaySettings);
     lockProgressionButton.addEventListener("click", () => {
       progressionLocked = !progressionLocked;
       lockProgressionButton.classList.toggle("active", progressionLocked);
