@@ -405,9 +405,9 @@
       }
       .key-display strong { margin-top: 1px; font-size: 24px; }
       .stage-bpm { width: 100%; justify-content: center; }
-      .chords { display: block; margin: 28px 0; }
-      .loop-divider, .chord { display: none; }
-      .chord.mobile-visible { display: block; min-height: 154px; }
+      .chords { grid-template-columns: repeat(2, 1fr); margin: 28px 0; }
+      .loop-divider { display: none; }
+      .chord { min-height: 154px; }
       .chord-name { margin-top: 20px; }
       .scroll-setting { display: none; }
       .transport-actions {
@@ -577,11 +577,11 @@
         </div>
       </section>
     </div>
-    <footer><span>Harmony Trainer · <span id="appVersion">v0.1.9</span> · Web Audio API synthesizer · </span><span data-i18n="volumeWarning">音量に注意して再生してください</span></footer>
+    <footer><span>Harmony Trainer · <span id="appVersion">v0.2.4</span> · Web Audio API synthesizer · </span><span data-i18n="volumeWarning">音量に注意して再生してください</span></footer>
   </main>
 
   <script>
-    const APP_VERSION = "v0.1.9";
+    const APP_VERSION = "v0.2.4";
     const NOTES = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
     const MAJOR_INTERVALS = [0, 2, 4, 5, 7, 9, 11];
     const MINOR_INTERVALS = [0, 2, 3, 5, 7, 8, 10];
@@ -639,11 +639,52 @@
         chordLevel: 0.62, outputLevel: 1.38
       },
       electricGuitar: {
-        level: 0.24, bassLevel: 0.92, chordLevel: 0.68,
-        strumDelay: 0.022, physicalModel: true, pluckDamping: 0.76,
-        loopSmoothing: 0.56, body: 0.16, stereoSpread: 0.2,
-        drive: 7.2, distortionMix: 0.68, lowBoost: 5, highBoost: 6,
-        outputLevel: 0.34
+        physicalModel: true,
+        output: {
+          master: 0.65,
+          busGain: 1.15,
+          bpm: 145,
+          noteDuration: 2.5,
+          fadeOut: 0.26,
+          strumDelay: 0.002,
+          stereoWidth: 0.17
+        },
+        string: {
+          bassLevel: 0.14,
+          chordLevel: 0.23,
+          damping: 0.9916,
+          smoothing: 0.29,
+          body: 0.19,
+          pluckPosition: 0.1,
+          detuneCents: 0.2,
+          pickNoise: 0.0025,
+          pickBrightness: 5950
+        },
+        compressor: {
+          threshold: -42,
+          knee: 33,
+          ratio: 10,
+          attack: 0.004,
+          release: 0.06
+        },
+        eq: {
+          lowFrequency: 120,
+          lowGain: 1.8,
+          highFrequency: 2400,
+          highGain: -3.1,
+          presenceFrequency: 2950,
+          presenceGain: 5.7,
+          notchFrequency: 3200,
+          notchDepth: 0
+        },
+        cabinet: {
+          highpass: 90,
+          lowpass: 7350,
+          midFrequency: 650,
+          midGain: 5.6,
+          midQ: 0.9,
+          cabinetLevel: 1
+        }
       }
     };
     const PATTERNS = {
@@ -884,7 +925,6 @@
           </article>
         `).join("")}
       `).join("");
-      chordContainer.querySelector(".chord")?.classList.add("mobile-visible");
     }
 
     function getLoopLimit() {
@@ -928,13 +968,14 @@
     }
 
     function createPluckedStringBuffer(frequency, duration, timbre, stringPosition) {
+      const string = timbre.string || timbre;
       const sampleRate = audioContext.sampleRate;
       const length = Math.ceil(sampleRate * duration);
       const period = Math.max(2, Math.round(sampleRate / frequency));
       const samples = new Float32Array(length);
       const delayLine = new Float32Array(period);
-      const pluckPosition = Math.max(1, Math.floor(period * (timbre.drive ? 0.16 : 0.22)));
-      const pluckDamping = timbre.pluckDamping ?? 0.58;
+      const pluckPosition = Math.max(1, Math.floor(period * (string.pluckPosition ?? 0.18)));
+      const pluckDamping = string.pluckDamping ?? 0.58;
 
       // Filtered noise approximates the softer attack of a finger-plucked string.
       let excitation = 0;
@@ -947,9 +988,9 @@
       let previous = delayLine[period - 1];
       let bodyLow = 0;
       let bodyResonance = 0;
-      const loopSmoothing = timbre.loopSmoothing ?? 0.8995;
-      const bodyAmount = timbre.body ?? 0.18;
-      const damping = Math.min(0.9975, (timbre.drive ? 0.9952 : 0.994) + 48 / (frequency * 1000));
+      const loopSmoothing = string.smoothing ?? timbre.loopSmoothing ?? 0.8995;
+      const bodyAmount = string.body ?? timbre.body ?? 0.18;
+      const damping = string.damping ?? Math.min(0.9975, (timbre.drive ? 0.9952 : 0.994) + 48 / (frequency * 1000));
       for (let index = 0; index < length; index += 1) {
         const position = index % period;
         const current = delayLine[position];
@@ -979,6 +1020,82 @@
       return buffer;
     }
 
+    function createPickNoise(start, destination, level, brightness) {
+      if (level <= 0) return;
+      const length = Math.floor(audioContext.sampleRate * 0.035);
+      const buffer = audioContext.createBuffer(1, length, audioContext.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let index = 0; index < data.length; index += 1) {
+        const fade = Math.exp(-index / (audioContext.sampleRate * 0.008));
+        data[index] = (Math.random() * 2 - 1) * fade;
+      }
+      const source = audioContext.createBufferSource();
+      const filter = audioContext.createBiquadFilter();
+      const gain = audioContext.createGain();
+      source.buffer = buffer;
+      filter.type = "highpass";
+      filter.frequency.value = brightness;
+      gain.gain.value = level;
+      source.connect(filter);
+      filter.connect(gain);
+      gain.connect(destination);
+      source.start(start);
+      activeGains.add(gain);
+      window.setTimeout(() => activeGains.delete(gain), 80);
+    }
+
+    function connectGuitarOutputChain(input, timbre) {
+      const compressor = audioContext.createDynamicsCompressor();
+      const eqLow = audioContext.createBiquadFilter();
+      const eqHigh = audioContext.createBiquadFilter();
+      const presence = audioContext.createBiquadFilter();
+      const notch = audioContext.createBiquadFilter();
+      const highpass = audioContext.createBiquadFilter();
+      const cabinetMid = audioContext.createBiquadFilter();
+      const lowpass = audioContext.createBiquadFilter();
+      const outputGain = audioContext.createGain();
+      compressor.threshold.value = timbre.compressor.threshold;
+      compressor.knee.value = timbre.compressor.knee;
+      compressor.ratio.value = timbre.compressor.ratio;
+      compressor.attack.value = timbre.compressor.attack;
+      compressor.release.value = timbre.compressor.release;
+      eqLow.type = "lowshelf";
+      eqLow.frequency.value = timbre.eq.lowFrequency;
+      eqLow.gain.value = timbre.eq.lowGain;
+      eqHigh.type = "highshelf";
+      eqHigh.frequency.value = timbre.eq.highFrequency;
+      eqHigh.gain.value = timbre.eq.highGain;
+      presence.type = "peaking";
+      presence.frequency.value = timbre.eq.presenceFrequency;
+      presence.Q.value = 0.9;
+      presence.gain.value = timbre.eq.presenceGain;
+      notch.type = "peaking";
+      notch.frequency.value = timbre.eq.notchFrequency;
+      notch.Q.value = 2;
+      notch.gain.value = -timbre.eq.notchDepth;
+      highpass.type = "highpass";
+      highpass.frequency.value = timbre.cabinet.highpass;
+      cabinetMid.type = "peaking";
+      cabinetMid.frequency.value = timbre.cabinet.midFrequency;
+      cabinetMid.Q.value = timbre.cabinet.midQ;
+      cabinetMid.gain.value = timbre.cabinet.midGain;
+      lowpass.type = "lowpass";
+      lowpass.frequency.value = timbre.cabinet.lowpass;
+      lowpass.Q.value = 0.72;
+      outputGain.gain.value = timbre.output.master * timbre.cabinet.cabinetLevel;
+      input.connect(compressor);
+      compressor.connect(eqLow);
+      eqLow.connect(eqHigh);
+      eqHigh.connect(presence);
+      presence.connect(notch);
+      notch.connect(highpass);
+      highpass.connect(cabinetMid);
+      cabinetMid.connect(lowpass);
+      lowpass.connect(outputGain);
+      outputGain.connect(masterGain);
+      return outputGain;
+    }
+
     function createDistortionCurve(amount) {
       const curve = new Float32Array(2048);
       for (let index = 0; index < curve.length; index += 1) {
@@ -989,49 +1106,37 @@
     }
 
     function playPhysicalGuitar(chord, start, duration, timbre) {
+      const output = timbre.output;
+      const string = timbre.string;
+      const noteDuration = Math.max(duration, output.noteDuration);
+      const fadeOut = Math.min(output.fadeOut ?? 0.32, noteDuration * 0.75);
       const chordGain = audioContext.createGain();
-      chordGain.gain.value = timbre.level * (timbre.outputLevel || 1);
-      if (timbre.drive) {
-        const dryGain = audioContext.createGain();
-        const distortion = audioContext.createWaveShaper();
-        const lowShelf = audioContext.createBiquadFilter();
-        const highShelf = audioContext.createBiquadFilter();
-        const wetGain = audioContext.createGain();
-        distortion.curve = createDistortionCurve(timbre.drive);
-        distortion.oversample = "4x";
-        lowShelf.type = "lowshelf";
-        lowShelf.frequency.value = 180;
-        lowShelf.gain.value = timbre.lowBoost;
-        highShelf.type = "highshelf";
-        highShelf.frequency.value = 2400;
-        highShelf.gain.value = timbre.highBoost;
-        dryGain.gain.value = 1 - timbre.distortionMix;
-        wetGain.gain.value = timbre.distortionMix;
-        chordGain.connect(dryGain);
-        dryGain.connect(masterGain);
-        chordGain.connect(distortion);
-        distortion.connect(lowShelf);
-        lowShelf.connect(highShelf);
-        highShelf.connect(wetGain);
-        wetGain.connect(masterGain);
-      } else {
-        chordGain.connect(masterGain);
-      }
+      chordGain.gain.value = output.busGain;
+      connectGuitarOutputChain(chordGain, timbre);
       activeGains.add(chordGain);
-      window.setTimeout(() => activeGains.delete(chordGain), duration * 1000);
+      window.setTimeout(() => activeGains.delete(chordGain), (noteDuration + fadeOut) * 1000);
 
       const notes = chordMidiNotes(chord);
       notes.forEach((midi, index) => {
-        const voiceStart = start + timbre.strumDelay * index;
+        const voiceStart = start + output.strumDelay * index;
         const source = audioContext.createBufferSource();
         const voiceGain = audioContext.createGain();
+        const panner = audioContext.createStereoPanner();
         const stringPosition = index / (notes.length - 1) * 2 - 1;
-        source.buffer = createPluckedStringBuffer(midiToFrequency(midi), duration, timbre, stringPosition);
-        voiceGain.gain.value = index === 0 ? timbre.bassLevel : timbre.chordLevel;
+        const detuneRatio = Math.pow(2, (string.detuneCents * stringPosition) / 1200);
+        source.buffer = createPluckedStringBuffer(midiToFrequency(midi) * detuneRatio, noteDuration, timbre, stringPosition);
+        const voiceLevel = index === 0 ? string.bassLevel : string.chordLevel;
+        const fadeStart = start + noteDuration - fadeOut;
+        voiceGain.gain.setValueAtTime(voiceLevel, voiceStart);
+        voiceGain.gain.setValueAtTime(voiceLevel, fadeStart);
+        voiceGain.gain.exponentialRampToValueAtTime(0.0001, start + noteDuration);
+        panner.pan.value = stringPosition * output.stereoWidth;
         source.connect(voiceGain);
-        voiceGain.connect(chordGain);
+        voiceGain.connect(panner);
+        panner.connect(chordGain);
+        createPickNoise(voiceStart, chordGain, string.pickNoise * (index === 0 ? 1.15 : 1), string.pickBrightness);
         source.start(voiceStart);
-        source.stop(start + duration);
+        source.stop(start + noteDuration);
       });
     }
 
@@ -1165,7 +1270,6 @@
       const visibleIndex = isInfiniteLoop() ? index % progression.length : index;
       document.querySelectorAll(".chord").forEach((element, chordIndex) => {
         element.classList.toggle("active", chordIndex === visibleIndex);
-        element.classList.toggle("mobile-visible", chordIndex === visibleIndex);
       });
       if (enableScroll.checked && !window.matchMedia("(max-width: 760px), (hover: none) and (pointer: coarse)").matches) {
         document.querySelector(`.chord[data-index="${visibleIndex}"]`)?.scrollIntoView({
